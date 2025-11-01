@@ -4,35 +4,25 @@
 
 // Setup type definitions for built-in Supabase Runtime APIs
 import "jsr:@supabase/functions-js/edge-runtime.d.ts"
-import { parse as parseYaml, stringify as stringifyYaml } from "jsr:@std/yaml"
-
-interface FileInput {
-  url: string
-  path: string // Path where file should be saved in the repo (e.g., "images/photo.jpg")
-}
+import { GitHubClient } from "./github.ts"
+import { downloadAndProcessFiles, getDocsFiles, type FileInput } from "./files.ts"
+import { updateMkDocsConfig } from "./mkdocs.ts"
 
 interface RequestBody {
   fileUrls: FileInput[]
   branchName: string
   githubToken: string
-  owner?: string // Default: "kannwism"
-  repo?: string // Default: "hh-docs"
-  baseBranch?: string // Default: "main"
+  owner?: string
+  repo?: string
+  baseBranch?: string
   commitMessage?: string
-}
-
-interface MkDocsConfig {
-  site_name?: string
-  theme?: any
-  nav?: Array<any>
-  [key: string]: any
 }
 
 console.log("GitHub File Upload Function Started")
 
 Deno.serve(async (req) => {
   try {
-    // Parse request body
+    // Parse and validate request
     const {
       fileUrls,
       branchName,
@@ -40,10 +30,9 @@ Deno.serve(async (req) => {
       owner = "kannwism",
       repo = "hh-docs",
       baseBranch = "main",
-      commitMessage = "Add files via edge function"
+      commitMessage = "Add files via edge function",
     }: RequestBody = await req.json()
 
-    // Validate inputs
     if (!fileUrls || !Array.isArray(fileUrls) || fileUrls.length === 0) {
       return new Response(
         JSON.stringify({ error: "fileUrls array is required and must not be empty" }),
@@ -65,236 +54,42 @@ Deno.serve(async (req) => {
       )
     }
 
-    const githubApiBase = "https://api.github.com"
-    const headers = {
-      "Authorization": `Bearer ${githubToken}`,
-      "Accept": "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28"
-    }
-
-    // Step 1: Get the reference of the base branch
-    console.log(`Getting reference for base branch: ${baseBranch}`)
-    const refResponse = await fetch(
-      `${githubApiBase}/repos/${owner}/${repo}/git/refs/heads/${baseBranch}`,
-      { headers }
-    )
-
-    if (!refResponse.ok) {
-      const error = await refResponse.text()
-      return new Response(
-        JSON.stringify({ error: `Failed to get base branch reference: ${error}` }),
-        { status: refResponse.status, headers: { "Content-Type": "application/json" } }
-      )
-    }
-
-    const refData = await refResponse.json()
-    const baseSha = refData.object.sha
-
-    // Step 2: Create a new branch (or use existing branch)
-    console.log(`Creating new branch: ${branchName}`)
-    const createBranchResponse = await fetch(
-      `${githubApiBase}/repos/${owner}/${repo}/git/refs`,
-      {
-        method: "POST",
-        headers: {
-          ...headers,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          ref: `refs/heads/${branchName}`,
-          sha: baseSha
-        })
-      }
-    )
-
-    if (!createBranchResponse.ok) {
-      // If branch already exists (422), that's okay - we'll use it
-      if (createBranchResponse.status === 422) {
-        console.log(`Branch ${branchName} already exists, using existing branch`)
-      } else {
-        const error = await createBranchResponse.text()
-        return new Response(
-          JSON.stringify({ error: `Failed to create branch: ${error}` }),
-          { status: createBranchResponse.status, headers: { "Content-Type": "application/json" } }
-        )
-      }
-    } else {
-      console.log(`Successfully created branch ${branchName}`)
-    }
-
-    // Step 3: Download files from URLs and prepare them for GitHub
-    console.log(`Downloading ${fileUrls.length} files...`)
-    const filePromises = fileUrls.map(async (fileInput) => {
-      try {
-        const fileResponse = await fetch(fileInput.url)
-        if (!fileResponse.ok) {
-          throw new Error(`Failed to download file from ${fileInput.url}: ${fileResponse.statusText}`)
-        }
-
-        // Get file content as array buffer
-        const arrayBuffer = await fileResponse.arrayBuffer()
-        const bytes = new Uint8Array(arrayBuffer)
-
-        // Convert to base64 for GitHub API
-        const base64Content = btoa(String.fromCharCode(...bytes))
-
-        // Convert .mdx to .md for files in docs/ directory
-        let finalPath = fileInput.path
-        if (finalPath.startsWith('docs/') && finalPath.endsWith('.mdx')) {
-          finalPath = finalPath.replace(/\.mdx$/, '.md')
-          console.log(`Converting ${fileInput.path} to ${finalPath}`)
-        }
-
-        return {
-          path: finalPath,
-          content: base64Content,
-          url: fileInput.url,
-          originalPath: fileInput.path
-        }
-      } catch (error) {
-        throw new Error(`Error processing file ${fileInput.url}: ${error.message}`)
-      }
+    // Initialize GitHub client
+    const github = new GitHubClient({
+      owner,
+      repo,
+      token: githubToken,
+      apiBase: "https://api.github.com",
     })
 
-    const files = await Promise.all(filePromises)
-    console.log(`Successfully downloaded all files`)
+    // Get base branch and create/use new branch
+    const baseSha = await github.getBaseBranchRef(baseBranch)
+    await github.createOrUseBranch(branchName, baseSha)
 
-    // Step 3.5: Check if any docs files were added, and update mkdocs.yml
-    const docsFiles = files.filter(f => f.path.startsWith('docs/') && f.path.endsWith('.md'))
-    let mkdocsUpdated = false
+    // Download and process files
+    const files = await downloadAndProcessFiles(fileUrls)
 
-    if (docsFiles.length > 0) {
-      console.log(`Found ${docsFiles.length} docs files, updating mkdocs.yml...`)
+    // Update mkdocs.yml if needed
+    const docsFiles = getDocsFiles(files)
+    const mkdocsFile = await updateMkDocsConfig(github, docsFiles, branchName, baseBranch)
 
-      try {
-        // Try to fetch mkdocs.yml from the new branch first, fallback to base branch
-        let mkdocsResponse = await fetch(
-          `${githubApiBase}/repos/${owner}/${repo}/contents/mkdocs.yml?ref=${branchName}`,
-          { headers }
-        )
-
-        // If not found on new branch, try base branch
-        if (!mkdocsResponse.ok) {
-          console.log('mkdocs.yml not found on new branch, trying base branch')
-          mkdocsResponse = await fetch(
-            `${githubApiBase}/repos/${owner}/${repo}/contents/mkdocs.yml?ref=${baseBranch}`,
-            { headers }
-          )
-        }
-
-        let mkdocsConfig: MkDocsConfig = { site_name: "Documentation" }
-        let mkdocsSha: string | undefined
-
-        if (mkdocsResponse.ok) {
-          const mkdocsData = await mkdocsResponse.json()
-          mkdocsSha = mkdocsData.sha
-
-          // Decode the base64 content
-          const mkdocsContent = atob(mkdocsData.content)
-          mkdocsConfig = parseYaml(mkdocsContent) as MkDocsConfig
-          console.log('Parsed existing mkdocs.yml')
-        } else {
-          console.log('mkdocs.yml not found, creating new one')
-        }
-
-        // Initialize nav array if it doesn't exist
-        if (!mkdocsConfig.nav) {
-          mkdocsConfig.nav = []
-        }
-
-        // Add new docs files to nav
-        for (const file of docsFiles) {
-          const relativePath = file.path.replace('docs/', '')
-          const fileName = relativePath.replace('.md', '')
-
-          // Generate a nice title from the filename
-          const title = fileName
-            .split(/[-_]/)
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ')
-
-          // Check if already in nav
-          const existsInNav = mkdocsConfig.nav.some((item: any) => {
-            if (typeof item === 'object') {
-              return Object.values(item).includes(relativePath)
-            }
-            return item === relativePath
-          })
-
-          if (!existsInNav) {
-            mkdocsConfig.nav.push({ [title]: relativePath })
-            console.log(`Added ${title} to navigation`)
-          }
-        }
-
-        // Convert back to YAML and base64
-        const updatedYaml = stringifyYaml(mkdocsConfig)
-        const updatedYamlBase64 = btoa(updatedYaml)
-
-        // Add mkdocs.yml to files to commit
-        files.push({
-          path: 'mkdocs.yml',
-          content: updatedYamlBase64,
-          url: 'internal://mkdocs-update',
-          originalPath: 'mkdocs.yml',
-          sha: mkdocsSha
-        })
-
-        mkdocsUpdated = true
-      } catch (error) {
-        console.error('Warning: Failed to update mkdocs.yml:', error)
-        // Continue anyway - the files will still be added
-      }
+    if (mkdocsFile) {
+      files.push(mkdocsFile)
     }
 
-    // Step 4: Add files to the new branch
-    console.log(`Adding files to branch ${branchName}...`)
-    const commitPromises = files.map(async (file: any) => {
-      // Check if file already exists on the new branch to get its SHA
-      let fileSha = file.sha
+    // Commit all files
+    console.log(`Adding ${files.length} files to branch ${branchName}...`)
+    const commitPromises = files.map(async (file) => {
+      // Check if file already exists on branch
+      const fileSha = file.sha || (await github.getFileSha(file.path, branchName))
 
-      if (!fileSha) {
-        const checkFileResponse = await fetch(
-          `${githubApiBase}/repos/${owner}/${repo}/contents/${file.path}?ref=${branchName}`,
-          { headers }
-        )
-
-        if (checkFileResponse.ok) {
-          const fileData = await checkFileResponse.json()
-          fileSha = fileData.sha
-          console.log(`File ${file.path} already exists on branch, using SHA: ${fileSha}`)
-        }
-      }
-
-      const requestBody: any = {
-        message: `${commitMessage}: ${file.path}`,
-        content: file.content,
-        branch: branchName
-      }
-
-      // If file has a SHA (i.e., it already exists), include it for update
-      if (fileSha) {
-        requestBody.sha = fileSha
-      }
-
-      const createFileResponse = await fetch(
-        `${githubApiBase}/repos/${owner}/${repo}/contents/${file.path}`,
-        {
-          method: "PUT",
-          headers: {
-            ...headers,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(requestBody)
-        }
+      return await github.commitFile(
+        file.path,
+        file.content,
+        `${commitMessage}: ${file.path}`,
+        branchName,
+        fileSha
       )
-
-      if (!createFileResponse.ok) {
-        const error = await createFileResponse.text()
-        throw new Error(`Failed to add file ${file.path}: ${error}`)
-      }
-
-      return await createFileResponse.json()
     })
 
     const commitResults = await Promise.all(commitPromises)
@@ -306,25 +101,24 @@ Deno.serve(async (req) => {
         success: true,
         message: `Successfully added ${files.length} files to branch ${branchName}`,
         branch: branchName,
-        files: files.map(f => f.path),
-        commits: commitResults.map(r => r.commit.sha),
-        mkdocsUpdated
+        files: files.map((f) => f.path),
+        commits: commitResults.map((r) => r.commit.sha),
+        mkdocsUpdated: !!mkdocsFile,
       }),
       {
         status: 200,
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
       }
     )
-
   } catch (error) {
     console.error("Error:", error)
     return new Response(
       JSON.stringify({
-        error: error.message || "An unexpected error occurred"
+        error: error.message || "An unexpected error occurred",
       }),
       {
         status: 500,
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
       }
     )
   }
