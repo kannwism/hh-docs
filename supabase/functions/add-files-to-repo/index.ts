@@ -77,22 +77,26 @@ Deno.serve(async (req) => {
       files.push(mkdocsFile)
     }
 
-    // Commit all files
+    // Commit all files sequentially to avoid SHA conflicts
     console.log(`Adding ${files.length} files to branch ${branchName}...`)
-    const commitPromises = files.map(async (file) => {
-      // Check if file already exists on branch
+    const commitResults = []
+
+    for (const file of files) {
+      // Check if file already exists on branch (fetch fresh each time)
       const fileSha = file.sha || (await github.getFileSha(file.path, branchName))
 
-      return await github.commitFile(
+      const result = await github.commitFile(
         file.path,
         file.content,
         `${commitMessage}: ${file.path}`,
         branchName,
         fileSha
       )
-    })
 
-    const commitResults = await Promise.all(commitPromises)
+      commitResults.push(result)
+      console.log(`Committed ${file.path}`)
+    }
+
     console.log(`Successfully committed ${commitResults.length} files`)
 
     // Return success response
