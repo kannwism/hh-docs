@@ -1,0 +1,284 @@
+---
+title: "Messages"
+description: "Send, receive, and manage email messages"
+---
+
+## Overview
+
+Messages are individual emails sent to or from your agent's inbox. AgentMail provides a comprehensive API for creating, retrieving, and managing messages with full support for HTML content, attachments, and threading.
+
+## Sending Messages
+
+Send an email from your agent's inbox:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/messages \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inbox_id": "inbox_abc123",
+    "to": ["recipient@example.com"],
+    "subject": "Hello from AgentMail",
+    "body": "This is the email body."
+  }'
+```
+
+### With HTML Content
+
+```bash
+curl -X POST https://api.agentmail.to/v1/messages \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inbox_id": "inbox_abc123",
+    "to": ["recipient@example.com"],
+    "subject": "Welcome!",
+    "body": "Plain text fallback",
+    "html": "<h1>Welcome!</h1><p>This is <strong>HTML</strong> content.</p>"
+  }'
+```
+
+### With CC and BCC
+
+```bash
+curl -X POST https://api.agentmail.to/v1/messages \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inbox_id": "inbox_abc123",
+    "to": ["recipient@example.com"],
+    "cc": ["manager@example.com"],
+    "bcc": ["archive@yourcompany.com"],
+    "subject": "Meeting Notes",
+    "body": "Here are the notes from our meeting."
+  }'
+```
+
+## Message Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | string | Unique message identifier |
+| `inbox_id` | string | ID of the inbox this message belongs to |
+| `thread_id` | string | ID of the conversation thread |
+| `from` | string | Sender email address |
+| `to` | array | List of recipient email addresses |
+| `cc` | array | List of CC recipients |
+| `bcc` | array | List of BCC recipients |
+| `subject` | string | Email subject line |
+| `body` | string | Plain text email body |
+| `html` | string | HTML email body |
+| `direction` | string | Either `inbound` or `outbound` |
+| `status` | string | Message status: `sent`, `delivered`, `failed`, etc. |
+| `created_at` | string | ISO 8601 timestamp |
+| `attachments` | array | List of attached files |
+
+## Receiving Messages
+
+### List Messages for an Inbox
+
+Retrieve all messages in an inbox:
+
+```bash
+curl https://api.agentmail.to/v1/inboxes/inbox_abc123/messages \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Filter Messages
+
+Use query parameters to filter messages:
+
+```bash
+# Get only unread messages
+curl "https://api.agentmail.to/v1/inboxes/inbox_abc123/messages?read=false" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Filter by sender
+curl "https://api.agentmail.to/v1/inboxes/inbox_abc123/messages?from=user@example.com" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Limit results
+curl "https://api.agentmail.to/v1/inboxes/inbox_abc123/messages?limit=10" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Get a Specific Message
+
+Retrieve details for a single message:
+
+```bash
+curl https://api.agentmail.to/v1/messages/msg_xyz789 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Message Operations
+
+### Mark as Read/Unread
+
+```bash
+# Mark as read
+curl -X PATCH https://api.agentmail.to/v1/messages/msg_xyz789 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"read": true}'
+
+# Mark as unread
+curl -X PATCH https://api.agentmail.to/v1/messages/msg_xyz789 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"read": false}'
+```
+
+### Delete a Message
+
+```bash
+curl -X DELETE https://api.agentmail.to/v1/messages/msg_xyz789 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Replying to Messages
+
+To reply to a message, include the `thread_id` from the original message:
+
+```javascript
+// Receive a message
+const incomingMessage = {
+  id: "msg_xyz789",
+  thread_id: "thread_123",
+  from: "customer@example.com",
+  subject: "Question about your service"
+};
+
+// Send a reply
+await fetch('https://api.agentmail.to/v1/messages', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    inbox_id: 'inbox_abc123',
+    to: [incomingMessage.from],
+    subject: `Re: ${incomingMessage.subject}`,
+    body: 'Thank you for your question. Here is the answer...',
+    thread_id: incomingMessage.thread_id  // Link to the same thread
+  })
+});
+```
+
+## Message Status
+
+Messages can have different statuses throughout their lifecycle:
+
+<AccordionGroup>
+  <Accordion icon="paper-plane" title="Queued">
+    The message is queued for sending.
+  </Accordion>
+  <Accordion icon="check" title="Sent">
+    The message has been sent to the recipient's mail server.
+  </Accordion>
+  <Accordion icon="check-double" title="Delivered">
+    The recipient's mail server confirmed delivery.
+  </Accordion>
+  <Accordion icon="exclamation-circle" title="Failed">
+    The message failed to send. Check the error details.
+  </Accordion>
+  <Accordion icon="ban" title="Bounced">
+    The recipient's server rejected the message.
+  </Accordion>
+</AccordionGroup>
+
+## Use Cases
+
+### Auto-Reply System
+
+```javascript
+async function handleIncomingMessage(message) {
+  if (message.direction === 'inbound') {
+    // Send automatic reply
+    await sendMessage({
+      inbox_id: message.inbox_id,
+      to: [message.from],
+      subject: `Re: ${message.subject}`,
+      body: 'Thank you for your email. We will respond within 24 hours.',
+      thread_id: message.thread_id
+    });
+
+    // Apply label for tracking
+    await addLabel(message.id, 'auto-replied');
+  }
+}
+```
+
+### Email Forwarding
+
+```javascript
+async function forwardToTeam(message) {
+  await sendMessage({
+    inbox_id: message.inbox_id,
+    to: ['team@yourcompany.com'],
+    subject: `Fwd: ${message.subject}`,
+    body: `
+      --- Forwarded message ---
+      From: ${message.from}
+      Date: ${message.created_at}
+      Subject: ${message.subject}
+
+      ${message.body}
+    `
+  });
+}
+```
+
+### Scheduled Follow-ups
+
+```javascript
+async function scheduleFollowUp(originalMessage, delayDays) {
+  setTimeout(async () => {
+    await sendMessage({
+      inbox_id: originalMessage.inbox_id,
+      to: [originalMessage.from],
+      subject: `Following up: ${originalMessage.subject}`,
+      body: 'Just wanted to follow up on my previous email...',
+      thread_id: originalMessage.thread_id
+    });
+  }, delayDays * 24 * 60 * 60 * 1000);
+}
+```
+
+## Best Practices
+
+<Card icon="reply" title="Use Threads">
+  Always include the `thread_id` when replying to keep conversations organized and maintain context.
+</Card>
+
+<Card icon="html5" title="HTML + Plain Text">
+  Provide both HTML and plain text versions for better email client compatibility.
+</Card>
+
+<Card icon="user-check" title="Validate Recipients">
+  Validate email addresses before sending to reduce bounce rates and maintain sender reputation.
+</Card>
+
+<Card icon="clock" title="Handle Status">
+  Monitor message status and handle failures gracefully with retry logic or notifications.
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Threads"
+    icon="comments"
+    href="/agentmail/core-features/threads"
+  >
+    Learn about conversation threading
+  </Card>
+  <Card
+    title="Attachments"
+    icon="paperclip"
+    href="/agentmail/core-features/attachments"
+  >
+    Handle file attachments in messages
+  </Card>
+</CardGroup>

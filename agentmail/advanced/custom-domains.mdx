@@ -1,0 +1,446 @@
+---
+title: "Custom Domains"
+description: "Use your own domain for professional email communications"
+---
+
+## Overview
+
+Custom domains allow your AI agents to send and receive emails from your own domain (e.g., `agent@yourcompany.com`) instead of the default `@mail.agentmail.to` addresses. This provides a professional appearance and builds trust with recipients.
+
+## Adding a Custom Domain
+
+### Step 1: Add Your Domain
+
+Register your domain with AgentMail:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/domains \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "domain": "yourcompany.com"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "domain_abc123",
+  "domain": "yourcompany.com",
+  "status": "pending",
+  "verification_token": "agentmail-verify=abc123xyz",
+  "dns_records": [
+    {
+      "type": "TXT",
+      "name": "@",
+      "value": "agentmail-verify=abc123xyz",
+      "purpose": "Domain verification"
+    },
+    {
+      "type": "MX",
+      "name": "@",
+      "value": "mx1.agentmail.to",
+      "priority": 10,
+      "purpose": "Receiving emails"
+    },
+    {
+      "type": "MX",
+      "name": "@",
+      "value": "mx2.agentmail.to",
+      "priority": 20,
+      "purpose": "Receiving emails (backup)"
+    },
+    {
+      "type": "TXT",
+      "name": "@",
+      "value": "v=spf1 include:spf.agentmail.to ~all",
+      "purpose": "SPF authentication"
+    },
+    {
+      "type": "TXT",
+      "name": "_dmarc",
+      "value": "v=DMARC1; p=none; rua=mailto:dmarc@yourcompany.com",
+      "purpose": "DMARC policy"
+    },
+    {
+      "type": "CNAME",
+      "name": "agentmail._domainkey",
+      "value": "dkim.agentmail.to",
+      "purpose": "DKIM signing"
+    }
+  ],
+  "created_at": "2024-01-15T10:30:00Z"
+}
+```
+
+### Step 2: Configure DNS Records
+
+Add the DNS records to your domain provider:
+
+<Steps>
+  <Step title="Verification Record">
+    Add the TXT record to verify domain ownership:
+    ```
+    Type: TXT
+    Name: @
+    Value: agentmail-verify=abc123xyz
+    ```
+  </Step>
+
+  <Step title="MX Records">
+    Add MX records to route incoming emails to AgentMail:
+    ```
+    Type: MX
+    Name: @
+    Value: mx1.agentmail.to
+    Priority: 10
+
+    Type: MX
+    Name: @
+    Value: mx2.agentmail.to
+    Priority: 20
+    ```
+  </Step>
+
+  <Step title="SPF Record">
+    Add SPF record to authorize AgentMail to send emails:
+    ```
+    Type: TXT
+    Name: @
+    Value: v=spf1 include:spf.agentmail.to ~all
+    ```
+  </Step>
+
+  <Step title="DKIM Record">
+    Add DKIM record for email signing:
+    ```
+    Type: CNAME
+    Name: agentmail._domainkey
+    Value: dkim.agentmail.to
+    ```
+  </Step>
+
+  <Step title="DMARC Record">
+    Add DMARC policy record:
+    ```
+    Type: TXT
+    Name: _dmarc
+    Value: v=DMARC1; p=none; rua=mailto:dmarc@yourcompany.com
+    ```
+  </Step>
+</Steps>
+
+### Step 3: Verify Domain
+
+After adding DNS records, verify your domain:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/domains/domain_abc123/verify \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+<Note>
+  DNS propagation can take up to 48 hours. AgentMail will automatically verify once records are detected.
+</Note>
+
+## Domain Status
+
+Domains can have different statuses:
+
+| Status | Description |
+|--------|-------------|
+| `pending` | DNS records not yet verified |
+| `verified` | Domain verified, ready to use |
+| `active` | Domain is actively sending/receiving emails |
+| `failed` | Verification failed, check DNS records |
+| `suspended` | Domain temporarily suspended |
+
+## Creating Inboxes with Custom Domains
+
+Once your domain is verified, create inboxes with custom addresses:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/inboxes \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Support Agent",
+    "domain_id": "domain_abc123",
+    "local_part": "support"
+  }'
+```
+
+This creates an inbox with the email address `support@yourcompany.com`.
+
+### Custom Email Addresses
+
+Create inboxes with specific email addresses:
+
+```javascript
+// support@yourcompany.com
+await createInbox({
+  name: 'Support Agent',
+  domain_id: 'domain_abc123',
+  local_part: 'support'
+});
+
+// sales@yourcompany.com
+await createInbox({
+  name: 'Sales Agent',
+  domain_id: 'domain_abc123',
+  local_part: 'sales'
+});
+
+// info@yourcompany.com
+await createInbox({
+  name: 'Info Agent',
+  domain_id: 'domain_abc123',
+  local_part: 'info'
+});
+```
+
+## Email Authentication
+
+### SPF (Sender Policy Framework)
+
+SPF verifies that emails come from authorized servers:
+
+```
+v=spf1 include:spf.agentmail.to ~all
+```
+
+### DKIM (DomainKeys Identified Mail)
+
+DKIM adds a digital signature to emails:
+
+```
+Type: CNAME
+Name: agentmail._domainkey
+Value: dkim.agentmail.to
+```
+
+### DMARC (Domain-based Message Authentication)
+
+DMARC policy for handling authentication failures:
+
+```
+v=DMARC1; p=quarantine; rua=mailto:dmarc@yourcompany.com; pct=100
+```
+
+<AccordionGroup>
+  <Accordion icon="shield-check" title="DMARC Policy: none">
+    Monitor only - no action taken on failures. Good for initial setup.
+    ```
+    v=DMARC1; p=none; rua=mailto:dmarc@yourcompany.com
+    ```
+  </Accordion>
+
+  <Accordion icon="shield-halved" title="DMARC Policy: quarantine">
+    Failed messages go to spam. Recommended for most use cases.
+    ```
+    v=DMARC1; p=quarantine; rua=mailto:dmarc@yourcompany.com
+    ```
+  </Accordion>
+
+  <Accordion icon="shield" title="DMARC Policy: reject">
+    Failed messages are rejected. Most strict, use after testing.
+    ```
+    v=DMARC1; p=reject; rua=mailto:dmarc@yourcompany.com
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Managing Domains
+
+### List All Domains
+
+```bash
+curl https://api.agentmail.to/v1/domains \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Get Domain Details
+
+```bash
+curl https://api.agentmail.to/v1/domains/domain_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Check DNS Records
+
+Verify current DNS configuration:
+
+```bash
+curl https://api.agentmail.to/v1/domains/domain_abc123/dns-check \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+Response:
+
+```json
+{
+  "domain": "yourcompany.com",
+  "records": [
+    {
+      "type": "MX",
+      "status": "valid",
+      "expected": "mx1.agentmail.to",
+      "actual": "mx1.agentmail.to"
+    },
+    {
+      "type": "SPF",
+      "status": "valid",
+      "expected": "v=spf1 include:spf.agentmail.to ~all",
+      "actual": "v=spf1 include:spf.agentmail.to ~all"
+    },
+    {
+      "type": "DKIM",
+      "status": "valid",
+      "expected": "dkim.agentmail.to",
+      "actual": "dkim.agentmail.to"
+    }
+  ]
+}
+```
+
+### Delete a Domain
+
+<Warning>
+  Deleting a domain will disable all inboxes using that domain!
+</Warning>
+
+```bash
+curl -X DELETE https://api.agentmail.to/v1/domains/domain_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Subdomain Configuration
+
+Use subdomains for different purposes:
+
+```javascript
+// Add subdomain for agents
+await createDomain({
+  domain: 'agents.yourcompany.com'
+});
+
+// Create inbox on subdomain
+await createInbox({
+  name: 'Support Agent',
+  domain_id: 'domain_subdomain123',
+  local_part: 'support'
+}); // Creates support@agents.yourcompany.com
+```
+
+## Catch-All Configuration
+
+Route all emails to your domain to a single inbox:
+
+```bash
+curl -X PATCH https://api.agentmail.to/v1/domains/domain_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "catch_all": true,
+    "catch_all_inbox_id": "inbox_default123"
+  }'
+```
+
+Now emails to any address at your domain (e.g., `anything@yourcompany.com`) will be routed to the catch-all inbox.
+
+## Deliverability Best Practices
+
+<Card icon="check-circle" title="Warm Up Your Domain">
+  Start with low sending volume and gradually increase to build sender reputation.
+</Card>
+
+<Card icon="shield-check" title="Complete Authentication">
+  Configure SPF, DKIM, and DMARC for maximum deliverability and trust.
+</Card>
+
+<Card icon="chart-line" title="Monitor Metrics">
+  Track delivery rates, bounce rates, and spam complaints to maintain good reputation.
+</Card>
+
+<Card icon="list-check" title="Use Real Addresses">
+  Avoid no-reply addresses when possible - use monitored inboxes for better engagement.
+</Card>
+
+## Domain Analytics
+
+Track domain performance:
+
+```bash
+curl https://api.agentmail.to/v1/domains/domain_abc123/metrics \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+Response:
+
+```json
+{
+  "domain": "yourcompany.com",
+  "period": "last_30_days",
+  "metrics": {
+    "emails_sent": 1250,
+    "emails_delivered": 1200,
+    "emails_bounced": 30,
+    "emails_complained": 5,
+    "delivery_rate": 96.0,
+    "bounce_rate": 2.4,
+    "complaint_rate": 0.4
+  }
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion icon="circle-xmark" title="Domain verification failed">
+    - Check that DNS records are correctly added
+    - Wait up to 48 hours for DNS propagation
+    - Use `dig` or `nslookup` to verify DNS records
+    - Ensure no conflicting records exist
+  </Accordion>
+
+  <Accordion icon="envelope-open-text" title="Emails not being received">
+    - Verify MX records are correctly configured
+    - Check that priority values are correct (10, 20)
+    - Ensure old MX records are removed
+    - Test with the DNS check endpoint
+  </Accordion>
+
+  <Accordion icon="ban" title="Emails going to spam">
+    - Ensure SPF, DKIM, and DMARC are properly configured
+    - Check sender reputation and domain age
+    - Avoid spam trigger words in content
+    - Implement proper unsubscribe mechanisms
+  </Accordion>
+
+  <Accordion icon="triangle-exclamation" title="High bounce rate">
+    - Validate recipient email addresses before sending
+    - Remove invalid addresses from your lists
+    - Check for typos in recipient addresses
+    - Monitor bounce reasons in webhook events
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Inboxes"
+    icon="inbox"
+    href="/agentmail/core-features/inboxes"
+  >
+    Create inboxes with custom domains
+  </Card>
+  <Card
+    title="Deliverability Guide"
+    icon="paper-plane"
+    href="/agentmail/guides/deliverability"
+  >
+    Optimize email deliverability
+  </Card>
+</CardGroup>

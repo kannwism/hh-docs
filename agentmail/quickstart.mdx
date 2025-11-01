@@ -1,0 +1,321 @@
+---
+title: "Quickstart"
+description: "Create your first inbox and send an email in minutes"
+---
+
+## Get Started with AgentMail
+
+This guide will walk you through creating your first agent inbox and sending an email. You'll be up and running in just a few minutes.
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- An AgentMail API key (sign up at [agentmail.to](https://agentmail.to))
+- Basic familiarity with REST APIs
+- Your preferred HTTP client or programming language
+
+## Step 1: Create an Inbox
+
+First, create an inbox for your AI agent. This will be your agent's email identity.
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.agentmail.to/v1/inboxes \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My First Agent"
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.agentmail.to/v1/inboxes', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    name: 'My First Agent'
+  })
+});
+
+const inbox = await response.json();
+console.log('Inbox created:', inbox.email);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    'https://api.agentmail.to/v1/inboxes',
+    headers={
+        'Authorization': 'Bearer YOUR_API_KEY',
+        'Content-Type': 'application/json'
+    },
+    json={
+        'name': 'My First Agent'
+    }
+)
+
+inbox = response.json()
+print(f"Inbox created: {inbox['email']}")
+```
+
+</CodeGroup>
+
+<Note>
+  Save the `id` and `email` from the response - you'll need them for sending emails!
+</Note>
+
+## Step 2: Send Your First Email
+
+Now that you have an inbox, let's send an email from your agent.
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.agentmail.to/v1/messages \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inbox_id": "inbox_123abc",
+    "to": ["recipient@example.com"],
+    "subject": "Hello from my AI Agent!",
+    "body": "This is my first email sent through AgentMail."
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.agentmail.to/v1/messages', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    inbox_id: 'inbox_123abc',
+    to: ['recipient@example.com'],
+    subject: 'Hello from my AI Agent!',
+    body: 'This is my first email sent through AgentMail.'
+  })
+});
+
+const message = await response.json();
+console.log('Email sent!', message.id);
+```
+
+```python Python
+response = requests.post(
+    'https://api.agentmail.to/v1/messages',
+    headers={
+        'Authorization': 'Bearer YOUR_API_KEY',
+        'Content-Type': 'application/json'
+    },
+    json={
+        'inbox_id': 'inbox_123abc',
+        'to': ['recipient@example.com'],
+        'subject': 'Hello from my AI Agent!',
+        'body': 'This is my first email sent through AgentMail.'
+    }
+)
+
+message = response.json()
+print(f"Email sent! Message ID: {message['id']}")
+```
+
+</CodeGroup>
+
+<Tip>
+  Replace `inbox_123abc` with the actual inbox ID from Step 1!
+</Tip>
+
+## Step 3: Retrieve Received Messages
+
+Check for messages received by your agent's inbox.
+
+<CodeGroup>
+
+```bash cURL
+curl https://api.agentmail.to/v1/inboxes/inbox_123abc/messages \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+```javascript JavaScript
+const response = await fetch(
+  'https://api.agentmail.to/v1/inboxes/inbox_123abc/messages',
+  {
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY'
+    }
+  }
+);
+
+const messages = await response.json();
+console.log('Received messages:', messages.data);
+```
+
+```python Python
+response = requests.get(
+    'https://api.agentmail.to/v1/inboxes/inbox_123abc/messages',
+    headers={
+        'Authorization': 'Bearer YOUR_API_KEY'
+    }
+)
+
+messages = response.json()
+print(f"Received {len(messages['data'])} messages")
+```
+
+</CodeGroup>
+
+## Step 4: Set Up Webhooks (Optional)
+
+For event-driven agents, configure webhooks to receive real-time notifications when emails arrive.
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.agentmail.to/v1/webhooks \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-app.com/webhooks/agentmail",
+    "events": ["message.received", "message.sent"]
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.agentmail.to/v1/webhooks', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    url: 'https://your-app.com/webhooks/agentmail',
+    events: ['message.received', 'message.sent']
+  })
+});
+
+const webhook = await response.json();
+console.log('Webhook created:', webhook.id);
+```
+
+```python Python
+response = requests.post(
+    'https://api.agentmail.to/v1/webhooks',
+    headers={
+        'Authorization': 'Bearer YOUR_API_KEY',
+        'Content-Type': 'application/json'
+    },
+    json={
+        'url': 'https://your-app.com/webhooks/agentmail',
+        'events': ['message.received', 'message.sent']
+    }
+)
+
+webhook = response.json()
+print(f"Webhook created: {webhook['id']}")
+```
+
+</CodeGroup>
+
+<Note>
+  Webhooks enable your agent to react immediately to incoming emails without polling!
+</Note>
+
+## Next Steps
+
+Congratulations! You've created your first agent inbox and sent an email. Here's what to explore next:
+
+<CardGroup cols={2}>
+  <Card
+    title="Core Features"
+    icon="envelope"
+    href="/agentmail/core-features/inboxes"
+  >
+    Learn about inboxes, messages, threads, and more
+  </Card>
+  <Card
+    title="Webhooks & Events"
+    icon="webhook"
+    href="/agentmail/advanced/webhooks"
+  >
+    Build event-driven agents with webhooks
+  </Card>
+  <Card
+    title="Custom Domains"
+    icon="globe"
+    href="/agentmail/advanced/custom-domains"
+  >
+    Configure your own domain for professional emails
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/agentmail/api-reference/overview"
+  >
+    Explore the complete API documentation
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Auto-Reply Agent
+
+Here's a simple pattern for building an auto-reply agent:
+
+```javascript
+// Webhook endpoint handler
+app.post('/webhooks/agentmail', async (req, res) => {
+  const event = req.body;
+
+  if (event.type === 'message.received') {
+    const incomingMessage = event.data;
+
+    // Send auto-reply
+    await fetch('https://api.agentmail.to/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer YOUR_API_KEY',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        inbox_id: incomingMessage.inbox_id,
+        to: [incomingMessage.from],
+        subject: `Re: ${incomingMessage.subject}`,
+        body: 'Thank you for your email. I am an AI agent and will process your request shortly.',
+        thread_id: incomingMessage.thread_id
+      })
+    });
+  }
+
+  res.status(200).send('OK');
+});
+```
+
+<Tip>
+  Always respond to webhooks with a 200 status code quickly to avoid timeouts!
+</Tip>
+
+## Need Help?
+
+<CardGroup cols={2}>
+  <Card
+    title="Discord Community"
+    icon="discord"
+    href="https://discord.gg/agentmail"
+  >
+    Ask questions and share your projects
+  </Card>
+  <Card
+    title="Email Support"
+    icon="envelope"
+    href="mailto:support@agentmail.to"
+  >
+    Contact our support team directly
+  </Card>
+</CardGroup>

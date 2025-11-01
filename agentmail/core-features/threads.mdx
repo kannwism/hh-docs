@@ -1,0 +1,299 @@
+---
+title: "Threads"
+description: "Manage email conversations with threading"
+---
+
+## Overview
+
+Threads group related messages together, making it easy to track conversations and maintain context. When you reply to an email, AgentMail automatically links messages into threads, just like a traditional email client.
+
+## How Threads Work
+
+Threads are automatically created when:
+- A new message is sent (creates a new thread)
+- A reply is sent with a `thread_id` (adds to existing thread)
+- An inbound message references a previous message (continues the thread)
+
+## Thread Structure
+
+```json
+{
+  "id": "thread_123abc",
+  "inbox_id": "inbox_abc123",
+  "subject": "Project Discussion",
+  "participants": [
+    "agent@mail.agentmail.to",
+    "user@example.com",
+    "colleague@example.com"
+  ],
+  "message_count": 5,
+  "last_message_at": "2024-01-15T14:30:00Z",
+  "created_at": "2024-01-10T09:00:00Z",
+  "labels": ["important", "project-alpha"]
+}
+```
+
+## Retrieving Threads
+
+### List All Threads
+
+Get all conversation threads for an inbox:
+
+```bash
+curl https://api.agentmail.to/v1/inboxes/inbox_abc123/threads \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Get a Specific Thread
+
+Retrieve a thread with all its messages:
+
+```bash
+curl https://api.agentmail.to/v1/threads/thread_123abc \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+Response includes all messages in the thread:
+
+```json
+{
+  "id": "thread_123abc",
+  "subject": "Project Discussion",
+  "messages": [
+    {
+      "id": "msg_001",
+      "from": "user@example.com",
+      "body": "What's the status of the project?",
+      "created_at": "2024-01-10T09:00:00Z"
+    },
+    {
+      "id": "msg_002",
+      "from": "agent@mail.agentmail.to",
+      "body": "The project is on track. We're in the final testing phase.",
+      "created_at": "2024-01-10T10:15:00Z"
+    }
+  ]
+}
+```
+
+## Replying in Threads
+
+To keep messages in the same conversation, include the `thread_id`:
+
+```javascript
+// Get the incoming message
+const incomingMessage = await getMessage('msg_xyz789');
+
+// Reply in the same thread
+await fetch('https://api.agentmail.to/v1/messages', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_API_KEY',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    inbox_id: incomingMessage.inbox_id,
+    to: [incomingMessage.from],
+    subject: `Re: ${incomingMessage.subject}`,
+    body: 'Here is my response...',
+    thread_id: incomingMessage.thread_id  // Keep in same thread
+  })
+});
+```
+
+## Thread Operations
+
+### Update Thread Labels
+
+Apply labels to an entire thread:
+
+```bash
+curl -X PATCH https://api.agentmail.to/v1/threads/thread_123abc \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "labels": ["urgent", "customer-support"]
+  }'
+```
+
+### Archive a Thread
+
+```bash
+curl -X PATCH https://api.agentmail.to/v1/threads/thread_123abc \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "archived": true
+  }'
+```
+
+### Delete a Thread
+
+<Warning>
+  Deleting a thread will permanently remove all messages in the conversation!
+</Warning>
+
+```bash
+curl -X DELETE https://api.agentmail.to/v1/threads/thread_123abc \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Filtering Threads
+
+Use query parameters to filter threads:
+
+```bash
+# Get threads with specific label
+curl "https://api.agentmail.to/v1/inboxes/inbox_abc123/threads?label=urgent" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Get unarchived threads only
+curl "https://api.agentmail.to/v1/inboxes/inbox_abc123/threads?archived=false" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# Get threads with specific participant
+curl "https://api.agentmail.to/v1/inboxes/inbox_abc123/threads?participant=user@example.com" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Use Cases
+
+### Conversation Context
+
+Track the full history of a conversation:
+
+```javascript
+async function getConversationContext(threadId) {
+  const thread = await fetch(
+    `https://api.agentmail.to/v1/threads/${threadId}`,
+    {
+      headers: { 'Authorization': 'Bearer YOUR_API_KEY' }
+    }
+  ).then(r => r.json());
+
+  // Build conversation history for AI context
+  const conversationHistory = thread.messages.map(msg => ({
+    role: msg.from.includes('agentmail.to') ? 'assistant' : 'user',
+    content: msg.body,
+    timestamp: msg.created_at
+  }));
+
+  return conversationHistory;
+}
+```
+
+### Smart Thread Management
+
+Automatically organize threads based on content:
+
+```javascript
+async function categorizeThread(thread) {
+  // Analyze thread subject and messages
+  const isSupport = /support|help|issue/i.test(thread.subject);
+  const isSales = /pricing|demo|purchase/i.test(thread.subject);
+  const isUrgent = /urgent|asap|emergency/i.test(thread.subject);
+
+  const labels = [];
+  if (isSupport) labels.push('support');
+  if (isSales) labels.push('sales');
+  if (isUrgent) labels.push('urgent');
+
+  // Apply labels
+  await updateThread(thread.id, { labels });
+}
+```
+
+### Thread Summarization
+
+Generate summaries of long conversations:
+
+```javascript
+async function summarizeThread(threadId) {
+  const thread = await getThread(threadId);
+
+  // Use AI to summarize the conversation
+  const summary = await generateSummary(
+    thread.messages.map(m => m.body).join('\n\n')
+  );
+
+  // Store summary in thread metadata
+  await updateThread(threadId, {
+    metadata: { summary }
+  });
+
+  return summary;
+}
+```
+
+### Auto-Archive Old Threads
+
+Keep inbox clean by archiving inactive threads:
+
+```javascript
+async function archiveOldThreads(inboxId, daysInactive = 30) {
+  const threads = await listThreads(inboxId);
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - daysInactive);
+
+  for (const thread of threads) {
+    const lastMessageDate = new Date(thread.last_message_at);
+
+    if (lastMessageDate < cutoffDate && !thread.archived) {
+      await updateThread(thread.id, { archived: true });
+      console.log(`Archived thread: ${thread.subject}`);
+    }
+  }
+}
+```
+
+## Best Practices
+
+<Card icon="link" title="Always Use Thread IDs">
+  Include the `thread_id` when replying to maintain conversation continuity and context.
+</Card>
+
+<Card icon="tags" title="Label Strategically">
+  Use labels to categorize threads by priority, topic, or status for easier filtering and automation.
+</Card>
+
+<Card icon="box-archive" title="Archive Regularly">
+  Archive completed conversations to keep your inbox focused on active threads.
+</Card>
+
+<Card icon="clock-rotate-left" title="Preserve History">
+  Don't delete threads unless necessary - they provide valuable conversation history.
+</Card>
+
+## Thread Properties Reference
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | string | Unique thread identifier |
+| `inbox_id` | string | ID of the inbox this thread belongs to |
+| `subject` | string | Thread subject (from first message) |
+| `participants` | array | List of all email addresses in the thread |
+| `message_count` | number | Total number of messages in the thread |
+| `unread_count` | number | Number of unread messages |
+| `labels` | array | Labels applied to the thread |
+| `archived` | boolean | Whether the thread is archived |
+| `last_message_at` | string | Timestamp of most recent message |
+| `created_at` | string | Timestamp of thread creation |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Messages"
+    icon="envelope"
+    href="/agentmail/core-features/messages"
+  >
+    Learn more about individual messages
+  </Card>
+  <Card
+    title="Labels"
+    icon="tag"
+    href="/agentmail/core-features/labels"
+  >
+    Organize with labels
+  </Card>
+</CardGroup>

@@ -1,0 +1,457 @@
+---
+title: "Webhooks"
+description: "Build event-driven agents with real-time email notifications"
+---
+
+## Overview
+
+Webhooks enable your AI agents to react immediately to email events without polling. When an event occurs (like receiving an email), AgentMail sends an HTTP POST request to your configured endpoint with the event data.
+
+## Setting Up Webhooks
+
+Create a webhook to receive event notifications:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/webhooks \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-app.com/webhooks/agentmail",
+    "events": ["message.received", "message.sent"],
+    "description": "Main webhook for email events"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "webhook_123abc",
+  "url": "https://your-app.com/webhooks/agentmail",
+  "events": ["message.received", "message.sent"],
+  "status": "active",
+  "secret": "whsec_abc123...",
+  "created_at": "2024-01-15T10:30:00Z"
+}
+```
+
+<Note>
+  Save the `secret` value - you'll use it to verify webhook signatures!
+</Note>
+
+## Available Events
+
+Subscribe to these webhook events:
+
+| Event | Description |
+|-------|-------------|
+| `message.received` | A new message arrived in the inbox |
+| `message.sent` | A message was successfully sent |
+| `message.failed` | A message failed to send |
+| `message.delivered` | Message was delivered to recipient |
+| `message.bounced` | Message bounced |
+| `draft.created` | A new draft was created |
+| `thread.updated` | A thread was updated |
+| `label.applied` | A label was added to a message/thread |
+
+## Webhook Payload
+
+When an event occurs, AgentMail sends a POST request:
+
+```json
+{
+  "id": "evt_xyz789",
+  "type": "message.received",
+  "created_at": "2024-01-15T14:30:00Z",
+  "data": {
+    "id": "msg_abc123",
+    "inbox_id": "inbox_def456",
+    "thread_id": "thread_ghi789",
+    "from": "sender@example.com",
+    "to": ["agent@mail.agentmail.to"],
+    "subject": "Question about your service",
+    "body": "I have a question...",
+    "attachments": [],
+    "created_at": "2024-01-15T14:30:00Z"
+  }
+}
+```
+
+## Verifying Webhooks
+
+Always verify webhook signatures to ensure requests are from AgentMail:
+
+```javascript
+const crypto = require('crypto');
+
+function verifyWebhookSignature(payload, signature, secret) {
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(payload))
+    .digest('hex');
+
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  );
+}
+
+// Express.js example
+app.post('/webhooks/agentmail', (req, res) => {
+  const signature = req.headers['x-agentmail-signature'];
+  const secret = 'whsec_abc123...'; // Your webhook secret
+
+  if (!verifyWebhookSignature(req.body, signature, secret)) {
+    return res.status(401).send('Invalid signature');
+  }
+
+  // Process the webhook
+  const event = req.body;
+  // ...
+
+  res.status(200).send('OK');
+});
+```
+
+## Handling Events
+
+### Basic Event Handler
+
+```javascript
+app.post('/webhooks/agentmail', async (req, res) => {
+  const event = req.body;
+
+  try {
+    switch (event.type) {
+      case 'message.received':
+        await handleMessageReceived(event.data);
+        break;
+
+      case 'message.sent':
+        await handleMessageSent(event.data);
+        break;
+
+      case 'message.failed':
+        await handleMessageFailed(event.data);
+        break;
+
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
+    }
+
+    // Always respond quickly
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Error processing webhook:', error);
+    res.status(500).send('Error');
+  }
+});
+```
+
+### Auto-Reply Agent
+
+Build an agent that automatically replies to emails:
+
+```javascript
+async function handleMessageReceived(message) {
+  // Generate AI response
+  const aiResponse = await generateResponse(message.body);
+
+  // Send reply
+  await fetch('https://api.agentmail.to/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      inbox_id: message.inbox_id,
+      to: [message.from],
+      subject: `Re: ${message.subject}`,
+      body: aiResponse,
+      thread_id: message.thread_id
+    })
+  });
+
+  // Add label for tracking
+  await addLabel(message.id, 'auto-replied');
+}
+```
+
+### Smart Routing
+
+Route messages based on content:
+
+```javascript
+async function handleMessageReceived(message) {
+  const body = message.body.toLowerCase();
+
+  if (body.includes('cancel') || body.includes('unsubscribe')) {
+    await routeToCancellationTeam(message);
+  } else if (body.includes('billing') || body.includes('payment')) {
+    await routeToBillingTeam(message);
+  } else if (body.includes('urgent') || body.includes('emergency')) {
+    await routeToOnCallTeam(message);
+  } else {
+    await routeToGeneralSupport(message);
+  }
+}
+```
+
+## Managing Webhooks
+
+### List All Webhooks
+
+```bash
+curl https://api.agentmail.to/v1/webhooks \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Update a Webhook
+
+```bash
+curl -X PATCH https://api.agentmail.to/v1/webhooks/webhook_123abc \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": ["message.received", "message.sent", "message.failed"]
+  }'
+```
+
+### Delete a Webhook
+
+```bash
+curl -X DELETE https://api.agentmail.to/v1/webhooks/webhook_123abc \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Pause/Resume Webhooks
+
+```bash
+# Pause
+curl -X PATCH https://api.agentmail.to/v1/webhooks/webhook_123abc \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "paused"}'
+
+# Resume
+curl -X PATCH https://api.agentmail.to/v1/webhooks/webhook_123abc \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "active"}'
+```
+
+## Retry Logic
+
+If your endpoint fails, AgentMail will retry the webhook:
+
+- First retry: After 5 seconds
+- Second retry: After 30 seconds
+- Third retry: After 5 minutes
+- Fourth retry: After 30 minutes
+- Fifth retry: After 2 hours
+
+<Note>
+  After 5 failed attempts, the webhook will be automatically disabled.
+</Note>
+
+## Best Practices
+
+<Card icon="bolt" title="Respond Quickly">
+  Always respond with a 200 status code within 5 seconds. Process events asynchronously if needed.
+</Card>
+
+<Card icon="shield-check" title="Verify Signatures">
+  Always verify webhook signatures to prevent spoofed requests.
+</Card>
+
+<Card icon="arrows-rotate" title="Handle Retries">
+  Implement idempotency to handle duplicate webhook deliveries gracefully.
+</Card>
+
+<Card icon="bug" title="Log Events">
+  Log all webhook events for debugging and auditing purposes.
+</Card>
+
+## Idempotency
+
+Handle duplicate webhook deliveries:
+
+```javascript
+const processedEvents = new Set();
+
+app.post('/webhooks/agentmail', async (req, res) => {
+  const event = req.body;
+
+  // Check if already processed
+  if (processedEvents.has(event.id)) {
+    console.log(`Event ${event.id} already processed`);
+    return res.status(200).send('OK');
+  }
+
+  // Process the event
+  await handleEvent(event);
+
+  // Mark as processed
+  processedEvents.add(event.id);
+
+  // Clean up old events periodically
+  if (processedEvents.size > 10000) {
+    processedEvents.clear();
+  }
+
+  res.status(200).send('OK');
+});
+```
+
+## Advanced Patterns
+
+### Event Queue
+
+Process webhooks asynchronously with a queue:
+
+```javascript
+const queue = require('bull');
+const webhookQueue = new queue('webhooks');
+
+app.post('/webhooks/agentmail', async (req, res) => {
+  // Quickly add to queue and respond
+  await webhookQueue.add(req.body);
+  res.status(200).send('OK');
+});
+
+// Process webhooks from queue
+webhookQueue.process(async (job) => {
+  const event = job.data;
+  await handleEvent(event);
+});
+```
+
+### Webhook Filtering
+
+Only process relevant events:
+
+```javascript
+async function handleMessageReceived(message) {
+  // Ignore automated messages
+  if (message.from.includes('noreply')) {
+    return;
+  }
+
+  // Ignore messages from your own inbox
+  if (message.from.includes('agentmail.to')) {
+    return;
+  }
+
+  // Process the message
+  await processMessage(message);
+}
+```
+
+### Multi-Webhook Architecture
+
+Use different webhooks for different purposes:
+
+```javascript
+// High-priority webhook for urgent messages
+await createWebhook({
+  url: 'https://your-app.com/webhooks/urgent',
+  events: ['message.received'],
+  filters: {
+    labels: ['urgent']
+  }
+});
+
+// General webhook for all other events
+await createWebhook({
+  url: 'https://your-app.com/webhooks/general',
+  events: ['message.received', 'message.sent']
+});
+
+// Monitoring webhook for failures
+await createWebhook({
+  url: 'https://your-app.com/webhooks/monitoring',
+  events: ['message.failed', 'message.bounced']
+});
+```
+
+## Testing Webhooks
+
+### Local Testing with ngrok
+
+Test webhooks locally:
+
+```bash
+# Start ngrok
+ngrok http 3000
+
+# Use ngrok URL for webhook
+curl -X POST https://api.agentmail.to/v1/webhooks \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://abc123.ngrok.io/webhooks/agentmail",
+    "events": ["message.received"]
+  }'
+```
+
+### Manual Webhook Testing
+
+Trigger a test webhook event:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/webhooks/webhook_123abc/test \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Webhook Logs
+
+View webhook delivery logs:
+
+```bash
+curl https://api.agentmail.to/v1/webhooks/webhook_123abc/logs \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+Response:
+
+```json
+{
+  "logs": [
+    {
+      "id": "log_123",
+      "event_id": "evt_xyz789",
+      "status": "success",
+      "response_code": 200,
+      "attempted_at": "2024-01-15T14:30:00Z"
+    },
+    {
+      "id": "log_456",
+      "event_id": "evt_abc123",
+      "status": "failed",
+      "response_code": 500,
+      "error": "Connection timeout",
+      "attempted_at": "2024-01-15T14:25:00Z"
+    }
+  ]
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Messages"
+    icon="envelope"
+    href="/agentmail/core-features/messages"
+  >
+    Learn about sending and receiving messages
+  </Card>
+  <Card
+    title="Integration Guides"
+    icon="plug"
+    href="/agentmail/guides/integrations"
+  >
+    Integrate with popular frameworks
+  </Card>
+</CardGroup>

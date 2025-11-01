@@ -1,0 +1,452 @@
+---
+title: "Pods (Multi-Tenancy)"
+description: "Create isolated email environments for multi-tenant applications"
+---
+
+## Overview
+
+Pods provide multi-tenant isolation in AgentMail, allowing you to create separate email environments for different customers, teams, or use cases. Each pod operates independently with its own inboxes, messages, and configuration.
+
+## What are Pods?
+
+A pod is an isolated email environment that contains:
+- Independent inboxes
+- Separate message storage
+- Isolated webhook configurations
+- Individual domain settings
+- Dedicated metrics and analytics
+
+Think of pods as separate "workspaces" - perfect for SaaS applications serving multiple customers.
+
+## Creating Pods
+
+Create a new pod for a tenant:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/pods \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Corp",
+    "description": "Email environment for Acme Corp",
+    "metadata": {
+      "customer_id": "cust_123",
+      "plan": "enterprise"
+    }
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "pod_abc123",
+  "name": "Acme Corp",
+  "description": "Email environment for Acme Corp",
+  "status": "active",
+  "metadata": {
+    "customer_id": "cust_123",
+    "plan": "enterprise"
+  },
+  "created_at": "2024-01-15T10:30:00Z"
+}
+```
+
+## Pod Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | string | Unique pod identifier |
+| `name` | string | Display name for the pod |
+| `description` | string | Optional description |
+| `status` | string | Pod status: `active`, `suspended`, `disabled` |
+| `metadata` | object | Custom metadata for tracking |
+| `limits` | object | Resource limits for the pod |
+| `created_at` | string | Creation timestamp |
+
+## Working with Pods
+
+### List All Pods
+
+```bash
+curl https://api.agentmail.to/v1/pods \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Get Pod Details
+
+```bash
+curl https://api.agentmail.to/v1/pods/pod_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Update a Pod
+
+```bash
+curl -X PATCH https://api.agentmail.to/v1/pods/pod_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Corporation",
+    "metadata": {
+      "customer_id": "cust_123",
+      "plan": "enterprise",
+      "upgraded_at": "2024-01-15T10:30:00Z"
+    }
+  }'
+```
+
+### Delete a Pod
+
+<Warning>
+  Deleting a pod permanently removes all associated inboxes, messages, and configuration!
+</Warning>
+
+```bash
+curl -X DELETE https://api.agentmail.to/v1/pods/pod_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Pod-Scoped Resources
+
+All resources are scoped to a specific pod:
+
+### Create Inbox in Pod
+
+```bash
+curl -X POST https://api.agentmail.to/v1/pods/pod_abc123/inboxes \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Customer Support"
+  }'
+```
+
+### List Pod Inboxes
+
+```bash
+curl https://api.agentmail.to/v1/pods/pod_abc123/inboxes \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Pod Messages
+
+```bash
+# Get all messages in a pod
+curl https://api.agentmail.to/v1/pods/pod_abc123/messages \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Pod Webhooks
+
+```bash
+# Create pod-specific webhook
+curl -X POST https://api.agentmail.to/v1/pods/pod_abc123/webhooks \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://customer-app.com/webhooks/email",
+    "events": ["message.received"]
+  }'
+```
+
+## Use Cases
+
+### SaaS Multi-Tenancy
+
+Create isolated environments for each customer:
+
+```javascript
+async function onboardCustomer(customer) {
+  // Create pod for customer
+  const pod = await fetch('https://api.agentmail.to/v1/pods', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name: customer.company_name,
+      metadata: {
+        customer_id: customer.id,
+        plan: customer.plan,
+        created_by: customer.email
+      }
+    })
+  }).then(r => r.json());
+
+  // Create default inbox in pod
+  const inbox = await fetch(
+    `https://api.agentmail.to/v1/pods/${pod.id}/inboxes`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer YOUR_API_KEY',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: 'Main Inbox'
+      })
+    }
+  ).then(r => r.json());
+
+  // Set up customer-specific webhook
+  await fetch(`https://api.agentmail.to/v1/pods/${pod.id}/webhooks`, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      url: `https://your-app.com/webhooks/${customer.id}`,
+      events: ['message.received', 'message.sent']
+    })
+  });
+
+  return { pod, inbox };
+}
+```
+
+### Team Workspaces
+
+Separate email environments for different teams:
+
+```javascript
+// Create pods for different departments
+const pods = await Promise.all([
+  createPod({ name: 'Sales Team' }),
+  createPod({ name: 'Support Team' }),
+  createPod({ name: 'Engineering Team' }),
+  createPod({ name: 'Marketing Team' })
+]);
+
+// Each team gets isolated inboxes
+for (const pod of pods) {
+  await createInbox({
+    pod_id: pod.id,
+    name: `${pod.name} - General`
+  });
+}
+```
+
+### Development Environments
+
+Create separate pods for development, staging, and production:
+
+```javascript
+const environments = ['development', 'staging', 'production'];
+
+for (const env of environments) {
+  const pod = await createPod({
+    name: `${env} Environment`,
+    metadata: { environment: env }
+  });
+
+  // Create test inboxes
+  await createInbox({
+    pod_id: pod.id,
+    name: 'Test Inbox'
+  });
+}
+```
+
+## Pod Resource Limits
+
+Configure resource limits for each pod:
+
+```bash
+curl -X PATCH https://api.agentmail.to/v1/pods/pod_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "limits": {
+      "max_inboxes": 50,
+      "max_messages_per_month": 10000,
+      "max_storage_mb": 5000,
+      "max_attachments_size_mb": 100
+    }
+  }'
+```
+
+### Enforcing Limits
+
+```javascript
+async function createInboxWithCheck(podId, inboxData) {
+  // Get pod details
+  const pod = await getPod(podId);
+
+  // Check inbox limit
+  const inboxes = await listPodInboxes(podId);
+  if (inboxes.length >= pod.limits.max_inboxes) {
+    throw new Error('Inbox limit reached for this pod');
+  }
+
+  // Create inbox
+  return await createInbox({
+    pod_id: podId,
+    ...inboxData
+  });
+}
+```
+
+## Pod Metrics
+
+Track usage and metrics per pod:
+
+```bash
+curl https://api.agentmail.to/v1/pods/pod_abc123/metrics \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+Response:
+
+```json
+{
+  "pod_id": "pod_abc123",
+  "period": "current_month",
+  "metrics": {
+    "inboxes_count": 12,
+    "messages_sent": 3450,
+    "messages_received": 2890,
+    "storage_used_mb": 1250,
+    "active_threads": 456,
+    "webhook_deliveries": 6340
+  },
+  "limits": {
+    "max_inboxes": 50,
+    "max_messages_per_month": 10000,
+    "max_storage_mb": 5000
+  },
+  "usage_percentage": {
+    "inboxes": 24,
+    "messages": 34.5,
+    "storage": 25
+  }
+}
+```
+
+## Pod Status Management
+
+### Suspend a Pod
+
+Temporarily disable a pod:
+
+```bash
+curl -X PATCH https://api.agentmail.to/v1/pods/pod_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "suspended"
+  }'
+```
+
+When suspended:
+- Inboxes cannot send emails
+- Incoming emails are queued (not lost)
+- Webhooks are paused
+- API access is limited to read-only
+
+### Reactivate a Pod
+
+```bash
+curl -X PATCH https://api.agentmail.to/v1/pods/pod_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "active"
+  }'
+```
+
+## Pod Migration
+
+Move resources between pods:
+
+```bash
+# Move inbox to different pod
+curl -X POST https://api.agentmail.to/v1/inboxes/inbox_123/migrate \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "target_pod_id": "pod_xyz789"
+  }'
+```
+
+## Best Practices
+
+<Card icon="shield-check" title="Isolate Customer Data">
+  Use pods to ensure complete data isolation between customers for security and compliance.
+</Card>
+
+<Card icon="gauge-high" title="Monitor Resource Usage">
+  Track pod metrics to identify customers approaching limits and prevent service disruptions.
+</Card>
+
+<Card icon="tags" title="Use Metadata">
+  Store customer IDs, plan types, and other relevant data in pod metadata for easy reference.
+</Card>
+
+<Card icon="clock-rotate-left" title="Implement Soft Deletes">
+  Consider suspending pods instead of deleting them immediately to allow for data recovery.
+</Card>
+
+## Pod-Based Billing
+
+Track usage for billing purposes:
+
+```javascript
+async function calculateMonthlyBill(podId) {
+  const metrics = await fetch(
+    `https://api.agentmail.to/v1/pods/${podId}/metrics?period=last_month`,
+    {
+      headers: { 'Authorization': 'Bearer YOUR_API_KEY' }
+    }
+  ).then(r => r.json());
+
+  // Calculate costs
+  const costs = {
+    base_fee: 29.00,
+    per_inbox: metrics.inboxes_count * 5.00,
+    per_1000_messages: Math.ceil(metrics.messages_sent / 1000) * 2.00,
+    storage_gb: Math.ceil(metrics.storage_used_mb / 1024) * 0.50
+  };
+
+  costs.total = Object.values(costs).reduce((sum, cost) => sum + cost, 0);
+
+  return costs;
+}
+```
+
+## Pod API Keys
+
+Create scoped API keys for each pod:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/pods/pod_abc123/api-keys \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Customer API Key",
+    "permissions": ["read", "write"]
+  }'
+```
+
+This allows customers to access only their pod's resources.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Inboxes"
+    icon="inbox"
+    href="/agentmail/core-features/inboxes"
+  >
+    Create inboxes within pods
+  </Card>
+  <Card
+    title="Webhooks"
+    icon="webhook"
+    href="/agentmail/advanced/webhooks"
+  >
+    Set up pod-specific webhooks
+  </Card>
+</CardGroup>

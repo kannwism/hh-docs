@@ -1,0 +1,193 @@
+---
+title: "Inboxes"
+description: "Create and manage email inboxes for your AI agents"
+---
+
+## Overview
+
+Inboxes are the foundation of AgentMail. Each inbox represents a unique email identity for your AI agent, complete with its own email address, message storage, and configuration.
+
+## Creating an Inbox
+
+Create a new inbox for your agent with a simple API call:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/inboxes \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Customer Support Agent",
+    "description": "Handles customer inquiries and support requests"
+  }'
+```
+
+### Response
+
+```json
+{
+  "id": "inbox_abc123",
+  "email": "agent-abc123@mail.agentmail.to",
+  "name": "Customer Support Agent",
+  "description": "Handles customer inquiries and support requests",
+  "created_at": "2024-01-15T10:30:00Z",
+  "status": "active"
+}
+```
+
+<Note>
+  Each inbox gets a unique email address automatically. You can also configure custom domains for professional addresses.
+</Note>
+
+## Inbox Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | string | Unique identifier for the inbox |
+| `email` | string | The inbox's email address |
+| `name` | string | Display name for the inbox |
+| `description` | string | Optional description of the inbox's purpose |
+| `status` | string | Current status: `active`, `paused`, or `disabled` |
+| `created_at` | string | ISO 8601 timestamp of creation |
+
+## Managing Inboxes
+
+### List All Inboxes
+
+Retrieve all inboxes in your account:
+
+```bash
+curl https://api.agentmail.to/v1/inboxes \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Get a Specific Inbox
+
+Retrieve details for a single inbox:
+
+```bash
+curl https://api.agentmail.to/v1/inboxes/inbox_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Update an Inbox
+
+Modify inbox properties:
+
+```bash
+curl -X PATCH https://api.agentmail.to/v1/inboxes/inbox_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Agent Name",
+    "status": "paused"
+  }'
+```
+
+### Delete an Inbox
+
+<Warning>
+  Deleting an inbox is permanent and will remove all associated messages and threads!
+</Warning>
+
+```bash
+curl -X DELETE https://api.agentmail.to/v1/inboxes/inbox_abc123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Inbox Status
+
+Inboxes can have three different statuses:
+
+<AccordionGroup>
+  <Accordion icon="check-circle" title="Active">
+    The inbox can send and receive emails normally. This is the default status.
+  </Accordion>
+  <Accordion icon="pause-circle" title="Paused">
+    The inbox will receive emails but cannot send them. Useful for temporary suspension.
+  </Accordion>
+  <Accordion icon="ban" title="Disabled">
+    The inbox cannot send or receive emails. Messages sent to disabled inboxes will bounce.
+  </Accordion>
+</AccordionGroup>
+
+## Use Cases
+
+### Dedicated Agent Inboxes
+
+Create separate inboxes for different agent roles:
+
+```javascript
+// Create a support agent inbox
+const supportInbox = await createInbox({
+  name: "Support Agent",
+  description: "Handles customer support inquiries"
+});
+
+// Create a sales agent inbox
+const salesInbox = await createInbox({
+  name: "Sales Agent",
+  description: "Responds to sales leads and questions"
+});
+
+// Create a notification inbox
+const notificationInbox = await createInbox({
+  name: "Notification Service",
+  description: "Sends automated notifications to users"
+});
+```
+
+### Multi-Tenant Applications
+
+Use inboxes to create isolated email environments for different customers or teams:
+
+```javascript
+// Create an inbox for each customer
+async function onboardCustomer(customerId, customerName) {
+  const inbox = await createInbox({
+    name: `${customerName} Agent`,
+    description: `Dedicated inbox for ${customerName}`,
+    metadata: {
+      customer_id: customerId
+    }
+  });
+
+  return inbox;
+}
+```
+
+## Best Practices
+
+<Card icon="lightbulb" title="Naming Conventions">
+  Use descriptive names that clearly indicate the inbox's purpose. This helps with organization and debugging.
+</Card>
+
+<Card icon="tags" title="Metadata">
+  Use the description field or custom metadata to track the inbox's role, associated users, or business context.
+</Card>
+
+<Card icon="shield" title="Status Management">
+  Pause inboxes during maintenance or testing rather than deleting them to preserve message history.
+</Card>
+
+<Card icon="recycle" title="Cleanup">
+  Regularly review and remove unused inboxes to keep your account organized and reduce costs.
+</Card>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Messages"
+    icon="envelope"
+    href="/agentmail/core-features/messages"
+  >
+    Learn how to send and receive messages
+  </Card>
+  <Card
+    title="Custom Domains"
+    icon="globe"
+    href="/agentmail/advanced/custom-domains"
+  >
+    Configure custom domains for professional email addresses
+  </Card>
+</CardGroup>

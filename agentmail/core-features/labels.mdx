@@ -1,0 +1,394 @@
+---
+title: "Labels"
+description: "Organize and categorize emails with custom labels"
+---
+
+## Overview
+
+Labels help you organize, categorize, and filter messages and threads. Use labels to implement workflows, track message status, or categorize emails by topic, priority, or any custom criteria.
+
+## Creating Labels
+
+Create custom labels for your inbox:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/labels \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "urgent",
+    "color": "#FF0000",
+    "description": "High priority messages"
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "label_123",
+  "name": "urgent",
+  "color": "#FF0000",
+  "description": "High priority messages",
+  "created_at": "2024-01-15T10:30:00Z"
+}
+```
+
+## Label Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | string | Unique label identifier |
+| `name` | string | Label name (unique per account) |
+| `color` | string | Hex color code for visual identification |
+| `description` | string | Optional description of label purpose |
+| `created_at` | string | Creation timestamp |
+
+## Managing Labels
+
+### List All Labels
+
+```bash
+curl https://api.agentmail.to/v1/labels \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Update a Label
+
+```bash
+curl -X PATCH https://api.agentmail.to/v1/labels/label_123 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "color": "#FF5500",
+    "description": "Updated description"
+  }'
+```
+
+### Delete a Label
+
+```bash
+curl -X DELETE https://api.agentmail.to/v1/labels/label_123 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+<Note>
+  Deleting a label removes it from all messages and threads, but doesn't delete the messages themselves.
+</Note>
+
+## Applying Labels
+
+### Add Label to a Message
+
+```bash
+curl -X POST https://api.agentmail.to/v1/messages/msg_xyz789/labels \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "label": "urgent"
+  }'
+```
+
+### Add Label to a Thread
+
+```bash
+curl -X POST https://api.agentmail.to/v1/threads/thread_123/labels \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "label": "customer-support"
+  }'
+```
+
+### Remove Label
+
+```bash
+# From a message
+curl -X DELETE https://api.agentmail.to/v1/messages/msg_xyz789/labels/urgent \
+  -H "Authorization: Bearer YOUR_API_KEY"
+
+# From a thread
+curl -X DELETE https://api.agentmail.to/v1/threads/thread_123/labels/customer-support \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Filtering by Labels
+
+### Find Messages with Label
+
+```bash
+curl "https://api.agentmail.to/v1/messages?label=urgent" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Find Threads with Label
+
+```bash
+curl "https://api.agentmail.to/v1/threads?label=customer-support" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Multiple Labels
+
+Filter by multiple labels:
+
+```bash
+curl "https://api.agentmail.to/v1/messages?labels=urgent,customer-support" \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Use Cases
+
+### Automatic Categorization
+
+Automatically label incoming messages based on content:
+
+```javascript
+async function categorizeMessage(message) {
+  const labels = [];
+
+  // Check content for keywords
+  const body = message.body.toLowerCase();
+
+  if (body.includes('urgent') || body.includes('asap')) {
+    labels.push('urgent');
+  }
+
+  if (body.includes('bug') || body.includes('error')) {
+    labels.push('bug-report');
+  }
+
+  if (body.includes('feature') || body.includes('request')) {
+    labels.push('feature-request');
+  }
+
+  // Apply all detected labels
+  for (const label of labels) {
+    await addLabelToMessage(message.id, label);
+  }
+}
+```
+
+### Priority-Based Routing
+
+Route messages to different handlers based on labels:
+
+```javascript
+async function routeByPriority(message) {
+  const labels = message.labels || [];
+
+  if (labels.includes('urgent')) {
+    await notifyOnCallTeam(message);
+  } else if (labels.includes('sales')) {
+    await assignToSalesTeam(message);
+  } else if (labels.includes('support')) {
+    await addToSupportQueue(message);
+  } else {
+    await addToGeneralQueue(message);
+  }
+}
+```
+
+### Workflow States
+
+Track message processing states with labels:
+
+```javascript
+const WORKFLOW_LABELS = {
+  NEW: 'new',
+  IN_PROGRESS: 'in-progress',
+  NEEDS_REVIEW: 'needs-review',
+  COMPLETED: 'completed'
+};
+
+async function updateWorkflowState(messageId, newState) {
+  // Remove all workflow labels
+  for (const state of Object.values(WORKFLOW_LABELS)) {
+    try {
+      await removeLabelFromMessage(messageId, state);
+    } catch (e) {
+      // Label might not exist, that's okay
+    }
+  }
+
+  // Add new state label
+  await addLabelToMessage(messageId, newState);
+}
+
+// Usage
+await updateWorkflowState('msg_123', WORKFLOW_LABELS.IN_PROGRESS);
+```
+
+### Smart Inbox Organization
+
+Create different views using labels:
+
+```javascript
+async function getInboxViews(inboxId) {
+  // Get urgent items
+  const urgent = await fetch(
+    `https://api.agentmail.to/v1/messages?inbox_id=${inboxId}&label=urgent`,
+    { headers: { 'Authorization': 'Bearer YOUR_API_KEY' } }
+  ).then(r => r.json());
+
+  // Get items needing review
+  const needsReview = await fetch(
+    `https://api.agentmail.to/v1/messages?inbox_id=${inboxId}&label=needs-review`,
+    { headers: { 'Authorization': 'Bearer YOUR_API_KEY' } }
+  ).then(r => r.json());
+
+  // Get completed items
+  const completed = await fetch(
+    `https://api.agentmail.to/v1/messages?inbox_id=${inboxId}&label=completed`,
+    { headers: { 'Authorization': 'Bearer YOUR_API_KEY' } }
+  ).then(r => r.json());
+
+  return { urgent, needsReview, completed };
+}
+```
+
+### Sender-Based Labeling
+
+Automatically label based on sender:
+
+```javascript
+const VIP_SENDERS = [
+  'ceo@company.com',
+  'important@partner.com'
+];
+
+async function labelBySender(message) {
+  if (VIP_SENDERS.includes(message.from)) {
+    await addLabelToMessage(message.id, 'vip');
+  }
+
+  // Label by domain
+  const domain = message.from.split('@')[1];
+  await addLabelToMessage(message.id, `domain-${domain}`);
+}
+```
+
+### AI-Powered Categorization
+
+Use AI to analyze and categorize messages:
+
+```javascript
+async function aiCategorize(message) {
+  // Use AI to analyze the message
+  const analysis = await analyzeWithAI(message.body);
+
+  // Apply sentiment labels
+  if (analysis.sentiment === 'negative') {
+    await addLabelToMessage(message.id, 'negative-sentiment');
+  }
+
+  // Apply topic labels
+  for (const topic of analysis.topics) {
+    await addLabelToMessage(message.id, `topic-${topic}`);
+  }
+
+  // Apply intent labels
+  if (analysis.intent === 'complaint') {
+    await addLabelToMessage(message.id, 'complaint');
+  } else if (analysis.intent === 'question') {
+    await addLabelToMessage(message.id, 'question');
+  }
+}
+```
+
+## Common Label Schemes
+
+### Priority Labels
+
+```javascript
+const PRIORITY_LABELS = [
+  { name: 'urgent', color: '#FF0000' },
+  { name: 'high', color: '#FF9900' },
+  { name: 'normal', color: '#0099FF' },
+  { name: 'low', color: '#999999' }
+];
+```
+
+### Department Labels
+
+```javascript
+const DEPARTMENT_LABELS = [
+  { name: 'sales', color: '#00CC00' },
+  { name: 'support', color: '#0099FF' },
+  { name: 'engineering', color: '#9933FF' },
+  { name: 'marketing', color: '#FF6600' }
+];
+```
+
+### Status Labels
+
+```javascript
+const STATUS_LABELS = [
+  { name: 'new', color: '#00CC00' },
+  { name: 'in-progress', color: '#FF9900' },
+  { name: 'blocked', color: '#FF0000' },
+  { name: 'completed', color: '#999999' }
+];
+```
+
+## Best Practices
+
+<Card icon="list" title="Consistent Naming">
+  Use a consistent naming convention for labels (e.g., lowercase with hyphens).
+</Card>
+
+<Card icon="palette" title="Color Coding">
+  Assign meaningful colors to make labels easily recognizable at a glance.
+</Card>
+
+<Card icon="minimize" title="Don't Over-Label">
+  Keep your label system simple. Too many labels can be as confusing as no labels.
+</Card>
+
+<Card icon="robot" title="Automate Labeling">
+  Use webhooks and automation to apply labels based on rules rather than manual tagging.
+</Card>
+
+## Label Analytics
+
+Track label usage for insights:
+
+```javascript
+async function getLabelStats(inboxId) {
+  const labels = await listLabels();
+  const stats = {};
+
+  for (const label of labels) {
+    const messages = await fetch(
+      `https://api.agentmail.to/v1/messages?inbox_id=${inboxId}&label=${label.name}`,
+      { headers: { 'Authorization': 'Bearer YOUR_API_KEY' } }
+    ).then(r => r.json());
+
+    stats[label.name] = {
+      count: messages.data.length,
+      label: label
+    };
+  }
+
+  return stats;
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Threads"
+    icon="comments"
+    href="/agentmail/core-features/threads"
+  >
+    Organize conversations with threading
+  </Card>
+  <Card
+    title="Webhooks"
+    icon="webhook"
+    href="/agentmail/advanced/webhooks"
+  >
+    Automate label application with webhooks
+  </Card>
+</CardGroup>

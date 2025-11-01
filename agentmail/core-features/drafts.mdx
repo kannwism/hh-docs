@@ -1,0 +1,318 @@
+---
+title: "Drafts"
+description: "Create and manage email drafts for human-in-the-loop workflows"
+---
+
+## Overview
+
+Drafts allow you to create email messages that aren't immediately sent. This is essential for human-in-the-loop workflows where an AI agent prepares an email, but a human reviews and approves it before sending.
+
+## Creating Drafts
+
+Create a draft message without sending it:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/drafts \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inbox_id": "inbox_abc123",
+    "to": ["customer@example.com"],
+    "subject": "Response to your inquiry",
+    "body": "Thank you for reaching out..."
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "draft_xyz789",
+  "inbox_id": "inbox_abc123",
+  "to": ["customer@example.com"],
+  "subject": "Response to your inquiry",
+  "body": "Thank you for reaching out...",
+  "status": "draft",
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-15T10:30:00Z"
+}
+```
+
+## Draft Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | string | Unique draft identifier |
+| `inbox_id` | string | ID of the inbox this draft belongs to |
+| `to` | array | Recipient email addresses |
+| `cc` | array | CC recipients |
+| `bcc` | array | BCC recipients |
+| `subject` | string | Email subject |
+| `body` | string | Plain text email body |
+| `html` | string | HTML email body |
+| `thread_id` | string | Thread ID if replying to a conversation |
+| `status` | string | Draft status: `draft`, `reviewed`, `rejected` |
+| `created_at` | string | Creation timestamp |
+| `updated_at` | string | Last update timestamp |
+
+## Managing Drafts
+
+### List All Drafts
+
+Get all drafts for an inbox:
+
+```bash
+curl https://api.agentmail.to/v1/inboxes/inbox_abc123/drafts \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Get a Specific Draft
+
+```bash
+curl https://api.agentmail.to/v1/drafts/draft_xyz789 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+### Update a Draft
+
+Modify a draft before sending:
+
+```bash
+curl -X PATCH https://api.agentmail.to/v1/drafts/draft_xyz789 \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": "Updated subject line",
+    "body": "Updated email content..."
+  }'
+```
+
+### Delete a Draft
+
+Discard a draft without sending:
+
+```bash
+curl -X DELETE https://api.agentmail.to/v1/drafts/draft_xyz789 \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+## Sending Drafts
+
+Once a draft is ready, convert it to a sent message:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/drafts/draft_xyz789/send \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
+
+This will:
+1. Send the email to the recipients
+2. Convert the draft to a regular message
+3. Return the sent message object
+
+## Use Cases
+
+### AI-Generated Emails with Human Review
+
+```javascript
+async function generateAndReviewEmail(incomingMessage) {
+  // Step 1: AI generates a draft response
+  const aiResponse = await generateAIResponse(incomingMessage.body);
+
+  // Step 2: Create draft
+  const draft = await fetch('https://api.agentmail.to/v1/drafts', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      inbox_id: incomingMessage.inbox_id,
+      to: [incomingMessage.from],
+      subject: `Re: ${incomingMessage.subject}`,
+      body: aiResponse,
+      thread_id: incomingMessage.thread_id
+    })
+  }).then(r => r.json());
+
+  // Step 3: Notify human reviewer
+  await notifyReviewer({
+    draftId: draft.id,
+    reviewUrl: `https://yourapp.com/review/${draft.id}`
+  });
+
+  return draft;
+}
+
+// Human reviews and approves
+async function approveDraft(draftId) {
+  await fetch(`https://api.agentmail.to/v1/drafts/${draftId}/send`, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY'
+    }
+  });
+}
+```
+
+### Scheduled Email Workflow
+
+```javascript
+async function scheduleDraftForLater(draft, sendAt) {
+  // Store draft with scheduled time
+  await updateDraft(draft.id, {
+    metadata: {
+      scheduled_for: sendAt.toISOString()
+    }
+  });
+
+  // Set up delayed sending
+  const delay = sendAt.getTime() - Date.now();
+  setTimeout(async () => {
+    await sendDraft(draft.id);
+  }, delay);
+}
+```
+
+### Bulk Draft Creation
+
+```javascript
+async function createBulkDrafts(recipients, template) {
+  const drafts = [];
+
+  for (const recipient of recipients) {
+    // Personalize template for each recipient
+    const personalizedBody = template.body.replace(
+      '{{name}}',
+      recipient.name
+    );
+
+    const draft = await createDraft({
+      inbox_id: 'inbox_abc123',
+      to: [recipient.email],
+      subject: template.subject,
+      body: personalizedBody
+    });
+
+    drafts.push(draft);
+  }
+
+  return drafts;
+}
+```
+
+### A/B Testing Email Content
+
+```javascript
+async function createABTestDrafts(message, variations) {
+  const drafts = [];
+
+  for (const variation of variations) {
+    const draft = await createDraft({
+      inbox_id: message.inbox_id,
+      to: [message.from],
+      subject: variation.subject,
+      body: variation.body,
+      metadata: {
+        variation: variation.id,
+        test_id: 'test_123'
+      }
+    });
+
+    drafts.push(draft);
+  }
+
+  // Human selects best variation and sends
+  return drafts;
+}
+```
+
+## Draft Status Workflow
+
+Manage draft approval states:
+
+```javascript
+// Mark draft as reviewed
+await updateDraft('draft_xyz789', {
+  status: 'reviewed',
+  metadata: {
+    reviewed_by: 'user@yourcompany.com',
+    reviewed_at: new Date().toISOString()
+  }
+});
+
+// Mark draft as rejected
+await updateDraft('draft_xyz789', {
+  status: 'rejected',
+  metadata: {
+    rejection_reason: 'Tone needs to be more professional',
+    rejected_by: 'user@yourcompany.com'
+  }
+});
+
+// Send only approved drafts
+const drafts = await listDrafts('inbox_abc123');
+const approvedDrafts = drafts.filter(d => d.status === 'reviewed');
+
+for (const draft of approvedDrafts) {
+  await sendDraft(draft.id);
+}
+```
+
+## Best Practices
+
+<Card icon="eye" title="Review Before Sending">
+  Always implement a review process for AI-generated drafts to ensure quality and accuracy.
+</Card>
+
+<Card icon="clock" title="Auto-Expire Old Drafts">
+  Set up automated cleanup to delete drafts that haven't been sent after a certain period.
+</Card>
+
+<Card icon="database" title="Track Metadata">
+  Use the metadata field to track who created the draft, review status, and approval history.
+</Card>
+
+<Card icon="file-lines" title="Version Control">
+  For important drafts, consider saving previous versions before updates.
+</Card>
+
+## Draft Cleanup
+
+Automatically clean up old drafts:
+
+```javascript
+async function cleanupOldDrafts(inboxId, daysOld = 7) {
+  const drafts = await listDrafts(inboxId);
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+  for (const draft of drafts) {
+    const createdAt = new Date(draft.created_at);
+
+    if (createdAt < cutoffDate && draft.status === 'draft') {
+      await deleteDraft(draft.id);
+      console.log(`Deleted old draft: ${draft.id}`);
+    }
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Messages"
+    icon="envelope"
+    href="/agentmail/core-features/messages"
+  >
+    Learn about sending messages
+  </Card>
+  <Card
+    title="Webhooks"
+    icon="webhook"
+    href="/agentmail/advanced/webhooks"
+  >
+    Set up event notifications
+  </Card>
+</CardGroup>

@@ -1,0 +1,415 @@
+---
+title: "Attachments"
+description: "Send and receive file attachments with email messages"
+---
+
+## Overview
+
+AgentMail supports file attachments in email messages, allowing your AI agents to send documents, images, PDFs, and other files. Attachments are handled seamlessly across messages and threads.
+
+## Sending Attachments
+
+### Upload and Attach Files
+
+First, upload a file to get an attachment ID:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/attachments \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -F "file=@/path/to/document.pdf" \
+  -F "filename=document.pdf"
+```
+
+Response:
+
+```json
+{
+  "id": "att_xyz789",
+  "filename": "document.pdf",
+  "content_type": "application/pdf",
+  "size": 245760,
+  "url": "https://api.agentmail.to/v1/attachments/att_xyz789/download",
+  "created_at": "2024-01-15T10:30:00Z"
+}
+```
+
+### Send Message with Attachment
+
+Include the attachment ID when creating a message:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/messages \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inbox_id": "inbox_abc123",
+    "to": ["recipient@example.com"],
+    "subject": "Document attached",
+    "body": "Please find the document attached.",
+    "attachments": ["att_xyz789"]
+  }'
+```
+
+### Multiple Attachments
+
+Send multiple files in one message:
+
+```bash
+curl -X POST https://api.agentmail.to/v1/messages \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "inbox_id": "inbox_abc123",
+    "to": ["recipient@example.com"],
+    "subject": "Multiple files",
+    "body": "Here are the requested files.",
+    "attachments": ["att_xyz789", "att_abc123", "att_def456"]
+  }'
+```
+
+## Receiving Attachments
+
+### List Message Attachments
+
+When retrieving a message, attachments are included:
+
+```json
+{
+  "id": "msg_123",
+  "from": "sender@example.com",
+  "subject": "Files for review",
+  "body": "Please review these files.",
+  "attachments": [
+    {
+      "id": "att_xyz789",
+      "filename": "report.pdf",
+      "content_type": "application/pdf",
+      "size": 245760,
+      "url": "https://api.agentmail.to/v1/attachments/att_xyz789/download"
+    },
+    {
+      "id": "att_abc123",
+      "filename": "spreadsheet.xlsx",
+      "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "size": 52480,
+      "url": "https://api.agentmail.to/v1/attachments/att_abc123/download"
+    }
+  ]
+}
+```
+
+### Download Attachments
+
+Download an attachment file:
+
+```bash
+curl https://api.agentmail.to/v1/attachments/att_xyz789/download \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -o downloaded-file.pdf
+```
+
+## Attachment Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | string | Unique attachment identifier |
+| `filename` | string | Original filename |
+| `content_type` | string | MIME type of the file |
+| `size` | number | File size in bytes |
+| `url` | string | Download URL for the attachment |
+| `created_at` | string | Upload timestamp |
+
+## Supported File Types
+
+AgentMail supports a wide range of file types:
+
+<AccordionGroup>
+  <Accordion icon="file-pdf" title="Documents">
+    PDF, Word (.doc, .docx), Excel (.xls, .xlsx), PowerPoint (.ppt, .pptx), text files (.txt, .csv)
+  </Accordion>
+  <Accordion icon="image" title="Images">
+    JPEG, PNG, GIF, WebP, SVG, BMP
+  </Accordion>
+  <Accordion icon="file-zipper" title="Archives">
+    ZIP, RAR, 7Z, TAR, GZ
+  </Accordion>
+  <Accordion icon="code" title="Code Files">
+    JavaScript, Python, Java, C++, HTML, CSS, JSON, XML
+  </Accordion>
+  <Accordion icon="video" title="Media">
+    MP4, AVI, MOV, MP3, WAV (subject to size limits)
+  </Accordion>
+</AccordionGroup>
+
+## Size Limits
+
+<Note>
+  Maximum attachment size: **25 MB per file**
+
+  Maximum total attachments per message: **50 MB**
+</Note>
+
+## Use Cases
+
+### Document Delivery
+
+Send generated reports or documents:
+
+```javascript
+async function sendReportEmail(recipientEmail, reportData) {
+  // Generate PDF report
+  const pdfBuffer = await generatePDFReport(reportData);
+
+  // Upload as attachment
+  const formData = new FormData();
+  formData.append('file', pdfBuffer, 'monthly-report.pdf');
+
+  const attachment = await fetch('https://api.agentmail.to/v1/attachments', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY'
+    },
+    body: formData
+  }).then(r => r.json());
+
+  // Send email with attachment
+  await sendMessage({
+    inbox_id: 'inbox_abc123',
+    to: [recipientEmail],
+    subject: 'Your Monthly Report',
+    body: 'Please find your monthly report attached.',
+    attachments: [attachment.id]
+  });
+}
+```
+
+### Process Incoming Attachments
+
+Automatically process files from incoming emails:
+
+```javascript
+async function handleIncomingAttachment(message) {
+  for (const attachment of message.attachments) {
+    // Download the file
+    const fileBuffer = await fetch(attachment.url, {
+      headers: { 'Authorization': 'Bearer YOUR_API_KEY' }
+    }).then(r => r.arrayBuffer());
+
+    // Process based on file type
+    if (attachment.content_type === 'application/pdf') {
+      await processPDF(fileBuffer, attachment.filename);
+    } else if (attachment.content_type.startsWith('image/')) {
+      await processImage(fileBuffer, attachment.filename);
+    } else if (attachment.content_type.includes('spreadsheet')) {
+      await processSpreadsheet(fileBuffer, attachment.filename);
+    }
+
+    // Send confirmation
+    await sendMessage({
+      inbox_id: message.inbox_id,
+      to: [message.from],
+      subject: `Re: ${message.subject}`,
+      body: `Thank you! I've processed your file: ${attachment.filename}`,
+      thread_id: message.thread_id
+    });
+  }
+}
+```
+
+### Image Analysis
+
+Process images sent to your agent:
+
+```javascript
+async function analyzeImageAttachments(message) {
+  const imageAttachments = message.attachments.filter(
+    att => att.content_type.startsWith('image/')
+  );
+
+  for (const image of imageAttachments) {
+    // Download image
+    const imageBuffer = await downloadAttachment(image.id);
+
+    // Analyze with AI vision model
+    const analysis = await analyzeImageWithAI(imageBuffer);
+
+    // Send results
+    await sendMessage({
+      inbox_id: message.inbox_id,
+      to: [message.from],
+      subject: `Analysis: ${image.filename}`,
+      body: `I analyzed your image and found: ${analysis.description}`,
+      thread_id: message.thread_id
+    });
+  }
+}
+```
+
+### File Conversion
+
+Convert files to different formats:
+
+```javascript
+async function convertAndSend(message) {
+  const wordDocs = message.attachments.filter(
+    att => att.content_type.includes('msword')
+  );
+
+  for (const doc of wordDocs) {
+    // Download Word document
+    const docBuffer = await downloadAttachment(doc.id);
+
+    // Convert to PDF
+    const pdfBuffer = await convertWordToPDF(docBuffer);
+
+    // Upload converted file
+    const formData = new FormData();
+    formData.append('file', pdfBuffer, doc.filename.replace('.docx', '.pdf'));
+
+    const pdfAttachment = await uploadAttachment(formData);
+
+    // Send converted file
+    await sendMessage({
+      inbox_id: message.inbox_id,
+      to: [message.from],
+      subject: `Converted: ${doc.filename}`,
+      body: 'Here is your document in PDF format.',
+      attachments: [pdfAttachment.id],
+      thread_id: message.thread_id
+    });
+  }
+}
+```
+
+### Batch Processing
+
+Handle multiple files in one email:
+
+```javascript
+async function batchProcessAttachments(message) {
+  const results = [];
+
+  for (const attachment of message.attachments) {
+    try {
+      const result = await processFile(attachment);
+      results.push({
+        filename: attachment.filename,
+        status: 'success',
+        result: result
+      });
+    } catch (error) {
+      results.push({
+        filename: attachment.filename,
+        status: 'failed',
+        error: error.message
+      });
+    }
+  }
+
+  // Send summary
+  const summary = results.map(r =>
+    `${r.filename}: ${r.status}`
+  ).join('\n');
+
+  await sendMessage({
+    inbox_id: message.inbox_id,
+    to: [message.from],
+    subject: 'Processing Complete',
+    body: `Batch processing results:\n\n${summary}`,
+    thread_id: message.thread_id
+  });
+}
+```
+
+## Best Practices
+
+<Card icon="file-check" title="Validate File Types">
+  Always validate file types and sizes before processing to prevent security issues.
+</Card>
+
+<Card icon="shield-halved" title="Scan for Malware">
+  Implement virus scanning for incoming attachments, especially for public-facing inboxes.
+</Card>
+
+<Card icon="database" title="Storage Management">
+  Regularly clean up old attachments to manage storage costs and maintain performance.
+</Card>
+
+<Card icon="gauge-high" title="Size Optimization">
+  Compress large files before sending to stay within size limits and improve delivery speed.
+</Card>
+
+## Attachment Metadata
+
+Store additional information about attachments:
+
+```javascript
+async function uploadAttachmentWithMetadata(file, metadata) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('filename', file.name);
+  formData.append('metadata', JSON.stringify({
+    original_source: metadata.source,
+    uploaded_by: metadata.userId,
+    tags: metadata.tags
+  }));
+
+  const attachment = await fetch('https://api.agentmail.to/v1/attachments', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer YOUR_API_KEY'
+    },
+    body: formData
+  }).then(r => r.json());
+
+  return attachment;
+}
+```
+
+## Security Considerations
+
+<Warning>
+  Always validate and sanitize file inputs. Never execute or trust file contents without proper validation.
+</Warning>
+
+```javascript
+const ALLOWED_FILE_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'application/msword'
+];
+
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
+
+function validateAttachment(attachment) {
+  if (!ALLOWED_FILE_TYPES.includes(attachment.content_type)) {
+    throw new Error('File type not allowed');
+  }
+
+  if (attachment.size > MAX_FILE_SIZE) {
+    throw new Error('File too large');
+  }
+
+  return true;
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Messages"
+    icon="envelope"
+    href="/agentmail/core-features/messages"
+  >
+    Learn more about sending messages
+  </Card>
+  <Card
+    title="Webhooks"
+    icon="webhook"
+    href="/agentmail/advanced/webhooks"
+  >
+    Process attachments with webhooks
+  </Card>
+</CardGroup>
