@@ -11,6 +11,11 @@ product: SpinStack
 url: "https://www.spinstack.dev/"
 ---
 
+<video controls width="100%" style="margin-bottom: 2rem;">
+  <source src="https://maobrnmoolcaksrwsigq.supabase.co/storage/v1/object/public/shared/course_1_full_duration_final.mp4" type="video/mp4" />
+  Your browser does not support the video tag.
+</video>
+
 # Demo 4: Launching Live – Publishing Your Agent Flow
 
 Welcome to the SpinStack course tutorial! In this session, you'll learn how to turn your successfully tested agent flow into a live, monetizable product. This demo is inspired by a real-world use case in which an entrepreneur launches an automated content summarization service to serve paying customers.
