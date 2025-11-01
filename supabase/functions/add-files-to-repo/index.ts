@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
     const refData = await refResponse.json()
     const baseSha = refData.object.sha
 
-    // Step 2: Create a new branch
+    // Step 2: Create a new branch (or use existing branch)
     console.log(`Creating new branch: ${branchName}`)
     const createBranchResponse = await fetch(
       `${githubApiBase}/repos/${owner}/${repo}/git/refs`,
@@ -108,11 +108,18 @@ Deno.serve(async (req) => {
     )
 
     if (!createBranchResponse.ok) {
-      const error = await createBranchResponse.text()
-      return new Response(
-        JSON.stringify({ error: `Failed to create branch: ${error}` }),
-        { status: createBranchResponse.status, headers: { "Content-Type": "application/json" } }
-      )
+      // If branch already exists (422), that's okay - we'll use it
+      if (createBranchResponse.status === 422) {
+        console.log(`Branch ${branchName} already exists, using existing branch`)
+      } else {
+        const error = await createBranchResponse.text()
+        return new Response(
+          JSON.stringify({ error: `Failed to create branch: ${error}` }),
+          { status: createBranchResponse.status, headers: { "Content-Type": "application/json" } }
+        )
+      }
+    } else {
+      console.log(`Successfully created branch ${branchName}`)
     }
 
     // Step 3: Download files from URLs and prepare them for GitHub
@@ -243,6 +250,22 @@ Deno.serve(async (req) => {
     // Step 4: Add files to the new branch
     console.log(`Adding files to branch ${branchName}...`)
     const commitPromises = files.map(async (file: any) => {
+      // Check if file already exists on the new branch to get its SHA
+      let fileSha = file.sha
+
+      if (!fileSha) {
+        const checkFileResponse = await fetch(
+          `${githubApiBase}/repos/${owner}/${repo}/contents/${file.path}?ref=${branchName}`,
+          { headers }
+        )
+
+        if (checkFileResponse.ok) {
+          const fileData = await checkFileResponse.json()
+          fileSha = fileData.sha
+          console.log(`File ${file.path} already exists on branch, using SHA: ${fileSha}`)
+        }
+      }
+
       const requestBody: any = {
         message: `${commitMessage}: ${file.path}`,
         content: file.content,
@@ -250,8 +273,8 @@ Deno.serve(async (req) => {
       }
 
       // If file has a SHA (i.e., it already exists), include it for update
-      if (file.sha) {
-        requestBody.sha = file.sha
+      if (fileSha) {
+        requestBody.sha = fileSha
       }
 
       const createFileResponse = await fetch(
